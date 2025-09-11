@@ -75,7 +75,7 @@ type Server struct {
 
 func main() {
 	s := &Server{
-		addr:    envOr("ADDR", defaultAddr),
+		addr:    ":" + envOr("PORT", envOr("ADDR", defaultAddr)[1:]),
 		dataDir: envOr("DATA_DIR", filepath.Join(".", "data")),
 	}
 	s.uploadDir = filepath.Join(s.dataDir, "uploads")

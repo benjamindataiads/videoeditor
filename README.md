@@ -65,6 +65,26 @@ Visit **http://localhost:5173** in your browser.
 - `GET /api/exports` - List completed exports
 - `DELETE /api/exports/:filename` - Delete an export
 
+## Deployment
+
+### Railway Deployment (Recommended)
+
+Deploy to Railway with one command:
+
+```bash
+./deploy.sh
+```
+
+For detailed deployment instructions, see [RAILWAY_DEPLOYMENT.md](RAILWAY_DEPLOYMENT.md).
+
+### Manual Deployment
+
+The project includes Docker configurations for easy deployment to any platform:
+
+- `server/Dockerfile` - Backend service with FFmpeg
+- `web/Dockerfile` - Frontend static build
+- `railway.json` - Railway-specific configuration
+
 ## Technical Details
 
 - **Backend**: Go with ffmpeg-go for video processing
@@ -72,5 +92,3 @@ Visit **http://localhost:5173** in your browser.
 - **Video processing**: All clips normalized and concatenated via FFmpeg
 - **Audio sync**: Background audio trimmed to match video timeline duration
 - **Aspect ratios**: Dynamic scaling with letterboxing or cropping as needed
-
-

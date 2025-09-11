@@ -1,0 +1,7 @@
+data/uploads/*
+data/exports/*
+data/work/*
+*.log
+.git
+.gitignore
+README.md
