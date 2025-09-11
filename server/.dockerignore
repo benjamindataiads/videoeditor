@@ -1,7 +1,6 @@
-data/uploads/*
-data/exports/*
-data/work/*
+data/
 *.log
 .git
 .gitignore
 README.md
+.DS_Store
