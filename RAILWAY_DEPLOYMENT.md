@@ -71,17 +71,45 @@ If you encounter CORS issues, you may need to update your backend to allow reque
 ## Troubleshooting
 
 ### Build Issues
-- Check build logs in Railway dashboard
-- Ensure all dependencies are correctly specified in `package.json` and `go.mod`
+
+#### Docker Build Timeout
+If you see "context canceled" errors during Docker build:
+
+1. **Try the optimized Dockerfile**: The main `Dockerfile` uses multi-stage builds for better performance
+2. **Use Nixpacks instead**: Replace `railway.json` with `railway.nixpacks.json` and rename it to `railway.json`
+3. **Use lightweight build**: Replace the main Dockerfile with `Dockerfile.lightweight` (removes FFmpeg from build)
+
+#### Alternative Build Methods
+```bash
+# Method 1: Use Nixpacks (recommended for FFmpeg issues)
+mv railway.json railway.dockerfile.json
+mv railway.nixpacks.json railway.json
+
+# Method 2: Use lightweight Docker (no FFmpeg in container)
+mv server/Dockerfile server/Dockerfile.full
+mv server/Dockerfile.lightweight server/Dockerfile
+```
+
+#### FFmpeg Installation Issues
+- Railway's Docker builder sometimes times out on FFmpeg installation
+- Nixpacks handles system dependencies better than Docker for this use case
+- If FFmpeg is not available, video processing will fail but the app will still start
 
 ### Runtime Issues
 - Check service logs in Railway dashboard
 - Verify environment variables are set correctly
 - Ensure frontend is pointing to correct backend URL
+- Test endpoints manually: `curl https://your-app.railway.app/api/assets`
 
 ### CORS Issues
 - Verify `VITE_BACKEND_BASE` environment variable is correct
 - Check that backend allows requests from frontend domain
+- Ensure both services are deployed and running
+
+### Performance Issues
+- Railway's free tier has resource limits
+- Large video files may cause timeouts
+- Consider upgrading Railway plan for production use
 
 ## Post-Deployment
 
