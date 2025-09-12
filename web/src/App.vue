@@ -151,7 +151,7 @@
             <video v-show="overlayOpacity > 0"
                    ref="overlayPlayer"
                    :src="overlaySrc"
-                   muted
+                   muted preload="metadata"
                    class="absolute inset-0"
                    :style="{ opacity: overlayOpacity.toFixed(3) }"
                    :class="playerMediaClass" />
@@ -679,7 +679,8 @@ function setupTransitionPreview() {
   if (!nextAsset || nextAsset.kind !== 'video') return
   // Prepare overlay element
   const op = overlayPlayer.value
-  op.currentTime = 0
+  const nextStart = clips.value[nextIdx].startSec ?? 0
+  op.currentTime = Math.max(0, nextStart)
   op.pause()
   // Drive opacity in timeupdate
   player.value.ontimeupdate = () => {
@@ -692,12 +693,14 @@ function setupTransitionPreview() {
     if (remaining <= dur && remaining >= 0) {
       const progress = Math.min(1, Math.max(0, (dur - remaining) / dur))
       overlayOpacity.value = progress
-      if (op.paused) op.play()
+      if (op.paused) {
+        op.play().catch(() => {})
+      }
     } else {
       if (overlayOpacity.value !== 0) {
         overlayOpacity.value = 0
         op.pause()
-        op.currentTime = 0
+        op.currentTime = Math.max(0, nextStart)
       }
     }
   }
