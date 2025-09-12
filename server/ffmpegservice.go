@@ -338,62 +338,21 @@ func buildVideoChainWithTransitions(segPaths []string, transitions []Transition)
 		return ffmpeg.Concat(streams, ffmpeg.KwArgs{"v": 1, "a": 0})
 	}
 
-	// Build complex filter graph for transitions
-	// For xfade to work, we need to build a single complex filter expression
-	var inputs []*ffmpeg.Stream
-	for _, path := range segPaths {
-		inputs = append(inputs, ffmpeg.Input(path).Video())
-	}
-
-	// Build filter complex string
-	filterComplex := ""
-	currentOutput := "[0:v]"
-
+	// Iteratively chain clips with xfade when a transition is defined; otherwise hard concat
+	out := ffmpeg.Input(segPaths[0]).Video()
 	for i := 1; i < len(segPaths); i++ {
-		if transition, hasTransition := transitionMap[i-1]; hasTransition {
-			xfadeType := getXfadeTransition(transition.TransitionID)
-			nextInput := fmt.Sprintf("[%d:v]", i)
-			newOutput := fmt.Sprintf("[v%d]", i)
-
-			if i == len(segPaths)-1 {
-				newOutput = "[vout]"
-			}
-
-			if filterComplex != "" {
-				filterComplex += ";"
-			}
-
-			// Simple offset calculation - start transition 0.5 seconds before end
-			offset := 2.0 // Fixed offset for now
-
-			filterComplex += fmt.Sprintf("%s%sxfade=transition=%s:duration=%.2f:offset=%.2f%s",
-				currentOutput, nextInput, xfadeType, transition.Duration, offset, newOutput)
-
-			currentOutput = newOutput
+		next := ffmpeg.Input(segPaths[i]).Video()
+		if tr, ok := transitionMap[i-1]; ok {
+			out = ffmpeg.Filter([]*ffmpeg.Stream{out, next}, "xfade", ffmpeg.Args{
+				fmt.Sprintf("transition=%s", getXfadeTransition(tr.TransitionID)),
+				fmt.Sprintf("duration=%.2f", tr.Duration),
+				"offset=0",
+			})
 		} else {
-			// No transition, need to handle concatenation
-			// This is more complex in filter_complex, for now just use xfade with fade
-			nextInput := fmt.Sprintf("[%d:v]", i)
-			newOutput := fmt.Sprintf("[v%d]", i)
-
-			if i == len(segPaths)-1 {
-				newOutput = "[vout]"
-			}
-
-			if filterComplex != "" {
-				filterComplex += ";"
-			}
-
-			offset := 2.0
-			filterComplex += fmt.Sprintf("%s%sxfade=transition=fade:duration=0.5:offset=%.2f%s",
-				currentOutput, nextInput, offset, newOutput)
-
-			currentOutput = newOutput
+			out = ffmpeg.Concat([]*ffmpeg.Stream{out, next}, ffmpeg.KwArgs{"v": 1, "a": 0})
 		}
 	}
-
-	// For now, fall back to simple concatenation for complex cases
-	return ffmpeg.Concat(inputs, ffmpeg.KwArgs{"v": 1, "a": 0})
+	return out
 }
 
 // getXfadeTransition maps our transition IDs to FFmpeg xfade transition names

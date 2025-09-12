@@ -142,10 +142,20 @@
           </div>
 
           <!-- Player -->
-          <div :class="playerContainerClass" class="bg-gray-800 rounded-xl border border-gray-300 dark:border-gray-600 overflow-hidden shadow-lg">
+          <div :class="playerContainerClass" class="bg-gray-800 rounded-xl border border-gray-300 dark:border-gray-600 overflow-hidden shadow-lg relative">
             <video v-if="!isCurrentImage" ref="player" :src="currentSrc" @ended="onEnded"
                    :class="[playerMediaClass, { 'scale-x-[-1]': currentClip?.reversed }]" />
             <img v-else :class="[playerMediaClass, { 'scale-x-[-1]': currentClip?.reversed }]" :src="currentImageSrc" />
+
+            <!-- Overlay video for transition preview -->
+            <video v-show="overlayOpacity > 0"
+                   ref="overlayPlayer"
+                   :src="overlaySrc"
+                   muted
+                   class="absolute inset-0"
+                   :style="{ opacity: overlayOpacity.toFixed(3) }"
+                   :class="playerMediaClass" />
+
             <audio v-if="audioClips.length > 0" ref="audioPlayer" :src="audioSrc" @ended="onAudioEnded" class="hidden"/>
           </div>
 
@@ -382,6 +392,16 @@ const audioSrc = computed(() => audioClips.value.length > 0 ? backendBase + getA
 // Transitions
 const selectedTransition = ref<Transition | null>(null)
 const clipTransitions = ref<Record<number, ClipTransition>>({}) // clipIndex -> transition
+// Overlay for preview
+const overlayPlayer = ref<HTMLVideoElement | null>(null)
+const overlayOpacity = ref(0)
+const overlaySrc = computed(() => {
+  const nextIndex = currentIndex.value + 1
+  if (nextIndex >= clips.value.length) return ''
+  const asset = assets.value.find(a => a.id === clips.value[nextIndex].assetId)
+  if (!asset || asset.kind !== 'video') return ''
+  return backendBase + asset.url
+})
 const availableTransitions = ref<Transition[]>([
   {
     id: 'fade',
@@ -607,6 +627,7 @@ async function playAt(i: number) {
     const start = clip.startSec ?? 0
     const end = (clip.endSec ?? (clip.durationSec ?? 0))
     const p = player.value
+    setupTransitionPreview()
     
     if (clip.reversePlayback) {
       // Handle reverse playback
@@ -638,6 +659,45 @@ async function playAt(i: number) {
         p.load()
       } else {
         ensureStart()
+      }
+    }
+  }
+}
+
+// Transition preview: crossfade last transition.duration seconds of current clip into next clip
+function setupTransitionPreview() {
+  overlayOpacity.value = 0
+  const idx = currentIndex.value
+  const t = clipTransitions.value[idx]
+  if (!t) return
+  const transition = availableTransitions.value.find(x => x.id === t.transitionId)
+  if (!transition) return
+  const dur = Math.max(0.2, t.duration || transition.duration)
+  const nextIdx = idx + 1
+  if (!player.value || !overlayPlayer.value || nextIdx >= clips.value.length) return
+  const nextAsset = assets.value.find(a => a.id === clips.value[nextIdx].assetId)
+  if (!nextAsset || nextAsset.kind !== 'video') return
+  // Prepare overlay element
+  const op = overlayPlayer.value
+  op.currentTime = 0
+  op.pause()
+  // Drive opacity in timeupdate
+  player.value.ontimeupdate = () => {
+    updatePlayhead()
+    const current = player.value!.currentTime
+    const clip = currentClip.value!
+    const start = clip.startSec ?? 0
+    const end = (clip.endSec ?? (clip.durationSec ?? 0))
+    const remaining = end - current
+    if (remaining <= dur && remaining >= 0) {
+      const progress = Math.min(1, Math.max(0, (dur - remaining) / dur))
+      overlayOpacity.value = progress
+      if (op.paused) op.play()
+    } else {
+      if (overlayOpacity.value !== 0) {
+        overlayOpacity.value = 0
+        op.pause()
+        op.currentTime = 0
       }
     }
   }
