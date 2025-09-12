@@ -40,7 +40,7 @@ This guide will help you deploy your video editor app to Railway.
 1. Go to your frontend service settings
 2. Add environment variable:
    - **Name**: `VITE_BACKEND_BASE`
-   - **Value**: `https://your-backend-service-name.railway.app` (replace with actual backend URL)
+   - **Value**: `https://videoeditor-production-3bd0.up.railway.app` (replace with actual backend URL)
 
 ### Step 5: Update Frontend Environment File
 

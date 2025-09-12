@@ -9,7 +9,8 @@ build/
 .env
 .env.local
 .env.development
-.env.production
+# Allow production env file for Railway deployment
+# .env.production
 
 # Logs
 *.log
