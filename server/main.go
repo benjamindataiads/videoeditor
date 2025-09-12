@@ -36,6 +36,8 @@ type ExportClip struct {
 	DurationSec float64 `json:"durationSec"`
 	// Whether to reverse/mirror the clip horizontally
 	Reversed bool `json:"reversed"`
+	// Whether to play the clip in reverse (backwards in time)
+	ReversePlayback bool `json:"reversePlayback"`
 }
 
 type ExportRequest struct {

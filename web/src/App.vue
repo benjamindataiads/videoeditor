@@ -168,12 +168,21 @@
                     <div class="absolute top-0 right-0 w-1.5 h-full bg-gray-300 dark:bg-gray-600 cursor-ew-resize rounded-r"
                          @mousedown.stop.prevent="beginTrim(i, 'right', $event)"></div>
                     
-                    <!-- Reverse/Mirror Toggle Button -->
-                    <button @click.stop="toggleReverse(i)"
+                    <!-- Mirror Toggle Button -->
+                    <button @click.stop="toggleMirror(i)"
                             class="absolute top-1 left-1 w-5 h-5 bg-blue-500 text-white rounded text-xs hover:bg-blue-600 transition-all opacity-0 group-hover:opacity-100"
                             :class="{ 'opacity-100 bg-blue-600': c.reversed }"
-                            title="Toggle reverse/mirror">
+                            title="Toggle horizontal mirror">
                       ⇄
+                    </button>
+                    
+                    <!-- Reverse Playback Toggle Button (only for videos) -->
+                    <button v-if="getAsset(c.assetId)?.kind === 'video'" 
+                            @click.stop="toggleReversePlayback(i)"
+                            class="absolute top-1 left-7 w-5 h-5 bg-purple-500 text-white rounded text-xs hover:bg-purple-600 transition-all opacity-0 group-hover:opacity-100"
+                            :class="{ 'opacity-100 bg-purple-600': c.reversePlayback }"
+                            title="Toggle reverse playback">
+                      ⏪
                     </button>
                     
                     <span class="text-xs text-gray-600 dark:text-gray-400 mt-1">{{ displayDuration(c).toFixed(1) }}s</span>
@@ -273,7 +282,7 @@ import {
 } from '@heroicons/vue/24/outline'
 
 type Asset = { id: string; filename: string; url: string; kind: 'image'|'video'|'audio'|'unknown' }
-type ExportClip = { assetId: string; startSec?: number; endSec?: number; durationSec?: number; reversed?: boolean }
+type ExportClip = { assetId: string; startSec?: number; endSec?: number; durationSec?: number; reversed?: boolean; reversePlayback?: boolean }
 type ExportItem = { filename: string; url: string; size?: number; modTime?: string }
 
 // Debug environment variables
@@ -407,9 +416,18 @@ function removeClip(i: number) {
   playAt(Math.max(0, currentIndex.value))
 }
 
-function toggleReverse(i: number) {
+function toggleMirror(i: number) {
   const clip = clips.value[i]
   clip.reversed = !clip.reversed
+  // Refresh the current player if this is the active clip
+  if (i === currentIndex.value) {
+    playAt(i)
+  }
+}
+
+function toggleReversePlayback(i: number) {
+  const clip = clips.value[i]
+  clip.reversePlayback = !clip.reversePlayback
   // Refresh the current player if this is the active clip
   if (i === currentIndex.value) {
     playAt(i)
@@ -484,7 +502,8 @@ async function exportTimeline() {
         startSec: c.startSec ?? 0,
         endSec: c.endSec ?? 0,
         durationSec: c.durationSec ?? 0,
-        reversed: c.reversed ?? false
+        reversed: c.reversed ?? false,
+        reversePlayback: c.reversePlayback ?? false
       })),
       audio: audioClips.value.length > 0 ? { assetId: audioClips.value[0].assetId, volume: 1 } : undefined,
       aspectRatio: aspectRatio.value,
