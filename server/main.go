@@ -45,6 +45,13 @@ type ExportRequest struct {
 	Audio       *AudioSpec   `json:"audio,omitempty"`
 	AspectRatio string       `json:"aspectRatio,omitempty"`
 	CropMode    string       `json:"cropMode,omitempty"`
+	Transitions []Transition `json:"transitions,omitempty"`
+}
+
+type Transition struct {
+	ClipIndex    int     `json:"clipIndex"`    // Index of the clip this transition comes after
+	TransitionID string  `json:"transitionId"` // ID of the transition type
+	Duration     float64 `json:"duration"`     // Duration in seconds
 }
 
 type ExportResponse struct {

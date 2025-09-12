@@ -26,11 +26,13 @@
       <!-- Sidebar -->
       <aside class="w-64 flex-shrink-0 border-r border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 flex flex-col">
         <div class="p-3 flex-1 overflow-y-auto">
-          <div class="grid grid-cols-2 gap-1 mb-3">
+          <div class="grid grid-cols-3 gap-1 mb-3">
             <button @click="activeTab = 'media'" 
                     :class="activeTab === 'media' ? 'btn-primary' : 'btn-secondary'">Media</button>
             <button @click="activeTab = 'audio'"
                     :class="activeTab === 'audio' ? 'btn-primary' : 'btn-secondary'">Audio</button>
+            <button @click="activeTab = 'transitions'"
+                    :class="activeTab === 'transitions' ? 'btn-primary' : 'btn-secondary'">FX</button>
           </div>
 
           <div v-if="activeTab === 'media'" class="space-y-3">
@@ -84,6 +86,25 @@
               </div>
               <div v-if="audioAssets.length === 0" class="text-sm text-gray-500 text-center py-8">
                 No audio uploaded yet
+              </div>
+            </div>
+          </div>
+
+          <div v-if="activeTab === 'transitions'" class="space-y-3">
+            <div class="text-xs text-gray-600 dark:text-gray-400 mb-2">
+              Click on a transition to add between clips
+            </div>
+            
+            <div class="space-y-1">
+              <div v-for="transition in availableTransitions" :key="transition.id" 
+                   @click="selectTransition(transition)"
+                   class="card p-2 cursor-pointer hover:shadow-md transition-all relative group"
+                   :class="{ 'ring-2 ring-primary-500': selectedTransition?.id === transition.id }">
+                <div class="w-full h-16 bg-gradient-to-r rounded flex items-center justify-center text-white text-xs font-medium"
+                     :class="transition.gradient">
+                  {{ transition.name }}
+                </div>
+                <p class="text-xs text-gray-600 dark:text-gray-400 mt-1">{{ transition.description }}</p>
               </div>
             </div>
           </div>
@@ -151,46 +172,79 @@
 
                 <!-- Video Clips -->
                 <div class="pt-6 flex gap-2" :style="{ width: totalWidth + 'px', marginLeft: trackLeftPad + 'px' }">
-                  <div v-for="(c, i) in clips" :key="i" @click="playAt(i)"
-                       class="timeline-clip group relative"
-                       :class="{ 'active': i === currentIndex }"
-                       :style="{ width: clipWidth(c) + 'px' }">
-                    <img v-if="getAsset(c.assetId)?.kind === 'image'" 
-                         :src="backendBase + (getAsset(c.assetId)?.url || '')"
-                         class="w-20 h-14 object-cover rounded bg-gray-100"
-                         :class="{ 'scale-x-[-1]': c.reversed }" />
-                    <video v-else :src="backendBase + (getAsset(c.assetId)?.url || '')" muted preload="metadata"
+                  <template v-for="(c, i) in clips" :key="i">
+                    <div @click="playAt(i)"
+                         class="timeline-clip group relative"
+                         :class="{ 'active': i === currentIndex }"
+                         :style="{ width: clipWidth(c) + 'px' }">
+                      <img v-if="getAsset(c.assetId)?.kind === 'image'" 
+                           :src="backendBase + (getAsset(c.assetId)?.url || '')"
                            class="w-20 h-14 object-cover rounded bg-gray-100"
-                           :class="{ 'scale-x-[-1]': c.reversed }"></video>
-                    
-                    <div class="absolute top-0 left-0 w-1.5 h-full bg-gray-300 dark:bg-gray-600 cursor-ew-resize rounded-l"
-                         @mousedown.stop.prevent="beginTrim(i, 'left', $event)"></div>
-                    <div class="absolute top-0 right-0 w-1.5 h-full bg-gray-300 dark:bg-gray-600 cursor-ew-resize rounded-r"
-                         @mousedown.stop.prevent="beginTrim(i, 'right', $event)"></div>
-                    
-                    <!-- Mirror Toggle Button -->
-                    <button @click.stop="toggleMirror(i)"
-                            class="absolute top-1 left-1 w-5 h-5 bg-blue-500 text-white rounded text-xs hover:bg-blue-600 transition-all opacity-0 group-hover:opacity-100"
-                            :class="{ 'opacity-100 bg-blue-600': c.reversed }"
-                            title="Toggle horizontal mirror">
-                      ⇄
-                    </button>
-                    
-                    <!-- Reverse Playback Toggle Button (only for videos) -->
-                    <button v-if="getAsset(c.assetId)?.kind === 'video'" 
-                            @click.stop="toggleReversePlayback(i)"
-                            class="absolute top-1 left-7 w-5 h-5 bg-purple-500 text-white rounded text-xs hover:bg-purple-600 transition-all opacity-0 group-hover:opacity-100"
-                            :class="{ 'opacity-100 bg-purple-600': c.reversePlayback }"
-                            title="Toggle reverse playback">
-                      ⏪
-                    </button>
-                    
-                    <span class="text-xs text-gray-600 dark:text-gray-400 mt-1">{{ displayDuration(c).toFixed(1) }}s</span>
-                    <button @click.stop="removeClip(i)"
-                            class="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white rounded-full text-xs hover:bg-red-600 transition-colors">
-                      ✕
-                    </button>
-                  </div>
+                           :class="{ 'scale-x-[-1]': c.reversed }" />
+                      <video v-else :src="backendBase + (getAsset(c.assetId)?.url || '')" muted preload="metadata"
+                             class="w-20 h-14 object-cover rounded bg-gray-100"
+                             :class="{ 'scale-x-[-1]': c.reversed }"></video>
+                      
+                      <div class="absolute top-0 left-0 w-1.5 h-full bg-gray-300 dark:bg-gray-600 cursor-ew-resize rounded-l"
+                           @mousedown.stop.prevent="beginTrim(i, 'left', $event)"></div>
+                      <div class="absolute top-0 right-0 w-1.5 h-full bg-gray-300 dark:bg-gray-600 cursor-ew-resize rounded-r"
+                           @mousedown.stop.prevent="beginTrim(i, 'right', $event)"></div>
+                      
+                      <!-- Mirror Toggle Button -->
+                      <button @click.stop="toggleMirror(i)"
+                              class="absolute top-1 left-1 w-5 h-5 bg-blue-500 text-white rounded text-xs hover:bg-blue-600 transition-all opacity-0 group-hover:opacity-100"
+                              :class="{ 'opacity-100 bg-blue-600': c.reversed }"
+                              title="Toggle horizontal mirror">
+                        ⇄
+                      </button>
+                      
+                      <!-- Reverse Playback Toggle Button (only for videos) -->
+                      <button v-if="getAsset(c.assetId)?.kind === 'video'" 
+                              @click.stop="toggleReversePlayback(i)"
+                              class="absolute top-1 left-7 w-5 h-5 bg-purple-500 text-white rounded text-xs hover:bg-purple-600 transition-all opacity-0 group-hover:opacity-100"
+                              :class="{ 'opacity-100 bg-purple-600': c.reversePlayback }"
+                              title="Toggle reverse playback">
+                        ⏪
+                      </button>
+                      
+                      <span class="text-xs text-gray-600 dark:text-gray-400 mt-1">{{ displayDuration(c).toFixed(1) }}s</span>
+                      <button @click.stop="removeClip(i)"
+                              class="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white rounded-full text-xs hover:bg-red-600 transition-colors">
+                        ✕
+                      </button>
+                    </div>
+
+                    <!-- Transition between clips -->
+                    <div v-if="i < clips.length - 1" class="transition-area relative flex items-center">
+                      <!-- Add Transition Button -->
+                      <button v-if="!getTransitionForClip(i) && selectedTransition"
+                              @click="addTransitionBetweenClips(i)"
+                              class="w-6 h-6 bg-orange-500 text-white rounded-full text-xs hover:bg-orange-600 transition-colors flex items-center justify-center"
+                              :title="`Add ${selectedTransition.name} transition`">
+                        +
+                      </button>
+                      
+                      <!-- Existing Transition -->
+                      <div v-else-if="getTransitionForClip(i)" 
+                           class="transition-indicator relative group">
+                        <div class="w-8 h-4 rounded flex items-center justify-center text-xs text-white font-medium"
+                             :class="getTransitionForClip(i)?.gradient"
+                             :title="getTransitionForClip(i)?.name">
+                          FX
+                        </div>
+                        <button @click="removeTransition(i)"
+                                class="absolute -top-1 -right-1 w-3 h-3 bg-red-500 text-white rounded-full text-xs hover:bg-red-600 transition-colors opacity-0 group-hover:opacity-100">
+                          ✕
+                        </button>
+                      </div>
+                      
+                      <!-- Placeholder when no transition selected -->
+                      <div v-else class="w-6 h-6 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-full flex items-center justify-center">
+                        <span class="text-xs text-gray-400">+</span>
+                      </div>
+                    </div>
+                  </template>
+                  
                   <div v-if="clips.length === 0" class="text-sm text-gray-500 py-8">
                     Add clips from the sidebar
                   </div>
@@ -280,6 +334,8 @@ import {
 type Asset = { id: string; filename: string; url: string; kind: 'image'|'video'|'audio'|'unknown' }
 type ExportClip = { assetId: string; startSec?: number; endSec?: number; durationSec?: number; reversed?: boolean; reversePlayback?: boolean }
 type ExportItem = { filename: string; url: string; size?: number; modTime?: string }
+type Transition = { id: string; name: string; description: string; gradient: string; ffmpegFilter: string; duration: number }
+type ClipTransition = { transitionId: string; duration: number }
 
 // Debug environment variables
 console.log('Environment variables:', import.meta.env)
@@ -301,7 +357,7 @@ const timelineEl = ref<HTMLDivElement | null>(null)
 const theme = ref<'dark'|'light'>((localStorage.getItem('ve-theme') as 'dark'|'light') || 'dark')
 const exports = ref<ExportItem[]>([])
 const playheadX = ref(0)
-const activeTab = ref<'media'|'audio'>('media')
+const activeTab = ref<'media'|'audio'|'transitions'>('media')
 const aspectRatio = ref<'16:9'|'1:1'|'9:16'>('16:9')
 const cropMode = ref<'letterbox'|'crop'>('letterbox')
 let animId: number | null = null
@@ -317,6 +373,76 @@ const isCurrentImage = computed(() => currentAsset.value?.kind === 'image')
 const currentSrc = computed(() => isCurrentImage.value ? '' : (currentAsset.value ? backendBase + currentAsset.value.url : ''))
 const currentImageSrc = computed(() => isCurrentImage.value && currentAsset.value ? backendBase + currentAsset.value.url : '')
 const audioSrc = computed(() => audioClips.value.length > 0 ? backendBase + getAsset(audioClips.value[0].assetId)?.url : '')
+
+// Transitions
+const selectedTransition = ref<Transition | null>(null)
+const clipTransitions = ref<Record<number, ClipTransition>>({}) // clipIndex -> transition
+const availableTransitions = ref<Transition[]>([
+  {
+    id: 'fade',
+    name: 'Fade',
+    description: 'Smooth crossfade transition',
+    gradient: 'from-black to-gray-600',
+    ffmpegFilter: 'fade',
+    duration: 1.0
+  },
+  {
+    id: 'dissolve',
+    name: 'Dissolve',
+    description: 'Dissolve between clips',
+    gradient: 'from-blue-500 to-blue-700',
+    ffmpegFilter: 'dissolve',
+    duration: 1.5
+  },
+  {
+    id: 'wipeleft',
+    name: 'Wipe Left',
+    description: 'Wipe from right to left',
+    gradient: 'from-green-500 to-green-700',
+    ffmpegFilter: 'wipeleft',
+    duration: 1.0
+  },
+  {
+    id: 'wiperight',
+    name: 'Wipe Right',
+    description: 'Wipe from left to right',
+    gradient: 'from-green-700 to-green-500',
+    ffmpegFilter: 'wiperight',
+    duration: 1.0
+  },
+  {
+    id: 'slideleft',
+    name: 'Slide Left',
+    description: 'Slide from right to left',
+    gradient: 'from-purple-500 to-purple-700',
+    ffmpegFilter: 'slideleft',
+    duration: 1.2
+  },
+  {
+    id: 'slideright',
+    name: 'Slide Right',
+    description: 'Slide from left to right',
+    gradient: 'from-purple-700 to-purple-500',
+    ffmpegFilter: 'slideright',
+    duration: 1.2
+  },
+  {
+    id: 'circlecrop',
+    name: 'Circle',
+    description: 'Circular crop transition',
+    gradient: 'from-orange-500 to-orange-700',
+    ffmpegFilter: 'circlecrop',
+    duration: 1.5
+  },
+  {
+    id: 'radial',
+    name: 'Radial',
+    description: 'Radial wipe transition',
+    gradient: 'from-red-500 to-red-700',
+    ffmpegFilter: 'radial',
+    duration: 1.3
+  }
+])
 
 const playerContainerClass = computed(() => {
   switch (aspectRatio.value) {
@@ -430,6 +556,30 @@ function toggleReversePlayback(i: number) {
   }
 }
 
+// Transition functions
+function selectTransition(transition: Transition) {
+  selectedTransition.value = transition
+}
+
+function addTransitionBetweenClips(clipIndex: number) {
+  if (!selectedTransition.value || clipIndex >= clips.value.length - 1) return
+  
+  clipTransitions.value[clipIndex] = {
+    transitionId: selectedTransition.value.id,
+    duration: selectedTransition.value.duration
+  }
+}
+
+function removeTransition(clipIndex: number) {
+  delete clipTransitions.value[clipIndex]
+}
+
+function getTransitionForClip(clipIndex: number): Transition | null {
+  const clipTransition = clipTransitions.value[clipIndex]
+  if (!clipTransition) return null
+  return availableTransitions.value.find(t => t.id === clipTransition.transitionId) || null
+}
+
 async function playAt(i: number) {
   currentIndex.value = i
   await nextTick()
@@ -523,7 +673,12 @@ async function exportTimeline() {
       })),
       audio: audioClips.value.length > 0 ? { assetId: audioClips.value[0].assetId, volume: 1 } : undefined,
       aspectRatio: aspectRatio.value,
-      cropMode: cropMode.value
+      cropMode: cropMode.value,
+      transitions: Object.entries(clipTransitions.value).map(([clipIndex, transition]) => ({
+        clipIndex: parseInt(clipIndex),
+        transitionId: transition.transitionId,
+        duration: transition.duration
+      }))
     })
     if (data.status === 'done' && data.url) {
       exportUrl.value = data.url
