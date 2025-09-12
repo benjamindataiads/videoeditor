@@ -568,6 +568,8 @@ function addTransitionBetweenClips(clipIndex: number) {
     transitionId: selectedTransition.value.id,
     duration: selectedTransition.value.duration
   }
+  
+  console.log('DEBUG: Added transition', selectedTransition.value.name, 'between clips', clipIndex, 'and', clipIndex + 1)
 }
 
 function removeTransition(clipIndex: number) {
@@ -661,6 +663,15 @@ function onEnded() {
 async function exportTimeline() {
   exporting.value = true
   exportUrl.value = ''
+  
+  // Debug: log transitions being sent
+  const transitions = Object.entries(clipTransitions.value).map(([clipIndex, transition]) => ({
+    clipIndex: parseInt(clipIndex),
+    transitionId: transition.transitionId,
+    duration: transition.duration
+  }))
+  console.log('DEBUG: Sending transitions:', transitions)
+  
   try {
     const { data } = await axios.post<{exportId:string; url:string; status:string; error?:string}>(backendBase + '/api/export', {
       clips: clips.value.map(c => ({

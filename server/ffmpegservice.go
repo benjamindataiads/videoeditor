@@ -155,8 +155,18 @@ func buildConcatenatedMP4(s *Server, req ExportRequest, outPath string) error {
 		// Single clip, no transitions needed
 		videoOut = ffmpeg.Input(segPaths[0]).Video()
 	} else {
-		// Multiple clips, apply transitions
-		videoOut = buildVideoChainWithTransitions(segPaths, req.Transitions)
+		// Multiple clips, check if we have transitions
+		if len(req.Transitions) > 0 {
+			// Use direct FFmpeg command for transitions (more reliable)
+			return buildVideoWithTransitionsDirectly(s, req, segPaths, outPath)
+		} else {
+			// No transitions, simple concatenation
+			var streams []*ffmpeg.Stream
+			for _, p := range segPaths {
+				streams = append(streams, ffmpeg.Input(p).Video())
+			}
+			videoOut = ffmpeg.Concat(streams, ffmpeg.KwArgs{"v": 1, "a": 0})
+		}
 	}
 
 	// Optional audio
@@ -207,6 +217,93 @@ func buildConcatenatedMP4(s *Server, req ExportRequest, outPath string) error {
 	return nil
 }
 
+// buildVideoWithTransitionsDirectly builds video with transitions using direct FFmpeg commands
+func buildVideoWithTransitionsDirectly(s *Server, req ExportRequest, segPaths []string, outPath string) error {
+	fmt.Printf("DEBUG: Building video with %d transitions\n", len(req.Transitions))
+	for _, t := range req.Transitions {
+		fmt.Printf("DEBUG: Transition at clip %d: %s (duration: %.2f)\n", t.ClipIndex, t.TransitionID, t.Duration)
+	}
+
+	// Create a map of transitions by clip index
+	transitionMap := make(map[int]Transition)
+	for _, t := range req.Transitions {
+		transitionMap[t.ClipIndex] = t
+	}
+
+	// For simplicity, let's implement a basic transition approach
+	// We'll use xfade filter with proper input handling
+	if len(segPaths) == 2 && len(req.Transitions) == 1 {
+		// Simple case: two clips with one transition
+		transition := req.Transitions[0]
+		xfadeType := getXfadeTransition(transition.TransitionID)
+
+		// Build FFmpeg command for two-clip transition
+		input1 := ffmpeg.Input(segPaths[0])
+		input2 := ffmpeg.Input(segPaths[1])
+
+		// Create xfade filter
+		filterComplex := fmt.Sprintf("[0:v][1:v]xfade=transition=%s:duration=%.2f:offset=2.0[vout]",
+			xfadeType, transition.Duration)
+
+		// Handle audio if present
+		if req.Audio != nil {
+			a, ok := s.assetsIndex[req.Audio.AssetID]
+			if ok {
+				aPath := filepath.Join(s.uploadDir, a.Filename)
+				audioInput := ffmpeg.Input(aPath)
+
+				// Mix video with audio - need to use different approach for multiple maps
+				cmd := ffmpeg.Output([]*ffmpeg.Stream{input1, input2, audioInput}, outPath, ffmpeg.KwArgs{
+					"filter_complex": filterComplex,
+					"c:v":            "libx264",
+					"c:a":            "aac",
+					"pix_fmt":        "yuv420p",
+					"r":              30,
+				})
+				// Add maps separately to avoid duplicate keys
+				cmd = cmd.GlobalArgs("-map", "[vout]", "-map", "2:a")
+				return cmd.OverWriteOutput().Run()
+			}
+		}
+
+		// Video only with transition
+		return ffmpeg.Output([]*ffmpeg.Stream{input1, input2}, outPath, ffmpeg.KwArgs{
+			"filter_complex": filterComplex,
+			"map":            "[vout]",
+			"c:v":            "libx264",
+			"pix_fmt":        "yuv420p",
+			"r":              30,
+		}).OverWriteOutput().Run()
+	}
+
+	// For more complex cases, fall back to concatenation for now
+	var streams []*ffmpeg.Stream
+	for _, p := range segPaths {
+		streams = append(streams, ffmpeg.Input(p).Video())
+	}
+	videoOut := ffmpeg.Concat(streams, ffmpeg.KwArgs{"v": 1, "a": 0})
+
+	// Handle audio
+	if req.Audio != nil {
+		a, ok := s.assetsIndex[req.Audio.AssetID]
+		if ok {
+			aPath := filepath.Join(s.uploadDir, a.Filename)
+			audioIn := ffmpeg.Input(aPath)
+			if req.Audio.Volume > 0 && req.Audio.Volume != 1 {
+				audioIn = audioIn.Filter("volume", ffmpeg.Args{fmt.Sprintf("%f", req.Audio.Volume)})
+			}
+			return ffmpeg.Output([]*ffmpeg.Stream{videoOut, audioIn}, outPath, ffmpeg.KwArgs{
+				"c:v": "libx264", "pix_fmt": "yuv420p", "r": 30, "c:a": "aac",
+			}).OverWriteOutput().Run()
+		}
+	}
+
+	// Video only
+	return videoOut.Output(outPath, ffmpeg.KwArgs{
+		"c:v": "libx264", "pix_fmt": "yuv420p", "r": 30,
+	}).OverWriteOutput().Run()
+}
+
 // buildVideoChainWithTransitions creates a complex filter chain with xfade transitions
 func buildVideoChainWithTransitions(segPaths []string, transitions []Transition) *ffmpeg.Stream {
 	if len(segPaths) <= 1 {
@@ -222,36 +319,71 @@ func buildVideoChainWithTransitions(segPaths []string, transitions []Transition)
 		transitionMap[t.ClipIndex] = t
 	}
 
-	// Start with the first clip
-	result := ffmpeg.Input(segPaths[0]).Video()
+	// If no transitions, just concatenate normally
+	if len(transitionMap) == 0 {
+		var streams []*ffmpeg.Stream
+		for _, p := range segPaths {
+			streams = append(streams, ffmpeg.Input(p).Video())
+		}
+		return ffmpeg.Concat(streams, ffmpeg.KwArgs{"v": 1, "a": 0})
+	}
 
-	// Apply transitions between consecutive clips
+	// Build complex filter graph for transitions
+	// For xfade to work, we need to build a single complex filter expression
+	var inputs []*ffmpeg.Stream
+	for _, path := range segPaths {
+		inputs = append(inputs, ffmpeg.Input(path).Video())
+	}
+
+	// Build filter complex string
+	filterComplex := ""
+	currentOutput := "[0:v]"
+
 	for i := 1; i < len(segPaths); i++ {
-		nextClip := ffmpeg.Input(segPaths[i]).Video()
-
-		// Check if there's a transition after the previous clip (index i-1)
 		if transition, hasTransition := transitionMap[i-1]; hasTransition {
-			// Apply xfade transition
 			xfadeType := getXfadeTransition(transition.TransitionID)
+			nextInput := fmt.Sprintf("[%d:v]", i)
+			newOutput := fmt.Sprintf("[v%d]", i)
 
-			// For xfade to work properly, we need to calculate the offset
-			// The offset should be set so the transition starts before the first video ends
-			// This is a simplified calculation - in a real implementation you'd need to
-			// track the actual durations and calculate precise offsets
-			offset := 0.5 // Start transition 0.5 seconds before the end of current video
+			if i == len(segPaths)-1 {
+				newOutput = "[vout]"
+			}
 
-			result = ffmpeg.Filter([]*ffmpeg.Stream{result, nextClip}, "xfade", ffmpeg.Args{
-				fmt.Sprintf("transition=%s", xfadeType),
-				fmt.Sprintf("duration=%.2f", transition.Duration),
-				fmt.Sprintf("offset=%.2f", offset),
-			})
+			if filterComplex != "" {
+				filterComplex += ";"
+			}
+
+			// Simple offset calculation - start transition 0.5 seconds before end
+			offset := 2.0 // Fixed offset for now
+
+			filterComplex += fmt.Sprintf("%s%sxfade=transition=%s:duration=%.2f:offset=%.2f%s",
+				currentOutput, nextInput, xfadeType, transition.Duration, offset, newOutput)
+
+			currentOutput = newOutput
 		} else {
-			// No transition, just concatenate
-			result = ffmpeg.Concat([]*ffmpeg.Stream{result, nextClip}, ffmpeg.KwArgs{"v": 1, "a": 0})
+			// No transition, need to handle concatenation
+			// This is more complex in filter_complex, for now just use xfade with fade
+			nextInput := fmt.Sprintf("[%d:v]", i)
+			newOutput := fmt.Sprintf("[v%d]", i)
+
+			if i == len(segPaths)-1 {
+				newOutput = "[vout]"
+			}
+
+			if filterComplex != "" {
+				filterComplex += ";"
+			}
+
+			offset := 2.0
+			filterComplex += fmt.Sprintf("%s%sxfade=transition=fade:duration=0.5:offset=%.2f%s",
+				currentOutput, nextInput, offset, newOutput)
+
+			currentOutput = newOutput
 		}
 	}
 
-	return result
+	// For now, fall back to simple concatenation for complex cases
+	return ffmpeg.Concat(inputs, ffmpeg.KwArgs{"v": 1, "a": 0})
 }
 
 // getXfadeTransition maps our transition IDs to FFmpeg xfade transition names
