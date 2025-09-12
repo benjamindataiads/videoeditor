@@ -435,6 +435,8 @@ async function playAt(i: number) {
   await nextTick()
   clearImageTimer()
   detachVideoGuards()
+  clearReversePlayback()
+  
   // Start audio if present
   if (audioPlayer.value && audioClips.value.length > 0) {
     const timelineStart = getTimelineStartForClip(i)
@@ -447,21 +449,39 @@ async function playAt(i: number) {
     const clip = currentClip.value!
     const start = clip.startSec ?? 0
     const end = (clip.endSec ?? (clip.durationSec ?? 0))
-    attachVideoGuards(end)
     const p = player.value
-    const ensureStart = () => {
-      p.currentTime = Math.max(0, start)
-      p.play()
-    }
-    // track playhead
-    p.ontimeupdate = () => updatePlayhead()
-    startAnim()
-    if (isNaN(p.duration) || !isFinite(p.duration)) {
-      const onMeta = () => { p.removeEventListener('loadedmetadata', onMeta); ensureStart() }
-      p.addEventListener('loadedmetadata', onMeta)
-      p.load()
+    
+    if (clip.reversePlayback) {
+      // Handle reverse playback
+      const ensureReverseStart = () => {
+        p.currentTime = Math.min(end, p.duration || end)
+        startReversePlayback(p, start, end)
+      }
+      
+      if (isNaN(p.duration) || !isFinite(p.duration)) {
+        const onMeta = () => { p.removeEventListener('loadedmetadata', onMeta); ensureReverseStart() }
+        p.addEventListener('loadedmetadata', onMeta)
+        p.load()
+      } else {
+        ensureReverseStart()
+      }
     } else {
-      ensureStart()
+      // Normal forward playback
+      attachVideoGuards(end)
+      const ensureStart = () => {
+        p.currentTime = Math.max(0, start)
+        p.play()
+      }
+      // track playhead
+      p.ontimeupdate = () => updatePlayhead()
+      startAnim()
+      if (isNaN(p.duration) || !isFinite(p.duration)) {
+        const onMeta = () => { p.removeEventListener('loadedmetadata', onMeta); ensureStart() }
+        p.addEventListener('loadedmetadata', onMeta)
+        p.load()
+      } else {
+        ensureStart()
+      }
     }
   }
 }
@@ -552,6 +572,40 @@ function detachVideoGuards() {
   if (player.value) player.value.removeEventListener('timeupdate', onTimeUpdateGuard)
 }
 
+// Reverse playback implementation
+let reverseInterval: number | null = null
+function startReversePlayback(video: HTMLVideoElement, startTime: number, endTime: number) {
+  video.pause() // Don't use native playback
+  const fps = 30 // Target 30 FPS for smooth reverse playback
+  const frameTime = 1000 / fps
+  const playbackRate = 1 / fps // Move backwards by 1/30th of a second per frame
+  
+  let currentTime = video.currentTime
+  
+  reverseInterval = window.setInterval(() => {
+    currentTime -= playbackRate
+    
+    if (currentTime <= startTime) {
+      // Reached the beginning, move to next clip
+      clearReversePlayback()
+      onEnded()
+      return
+    }
+    
+    video.currentTime = currentTime
+    updatePlayhead()
+  }, frameTime)
+  
+  startAnim()
+}
+
+function clearReversePlayback() {
+  if (reverseInterval) {
+    window.clearInterval(reverseInterval)
+    reverseInterval = null
+  }
+}
+
 // Custom controls
 function playFromCurrent() { playAt(currentIndex.value) }
 function togglePlay() {
@@ -565,6 +619,7 @@ function togglePlay() {
     if (audioPlayer.value) audioPlayer.value.pause()
     clearImageTimer()
     detachVideoGuards()
+    clearReversePlayback()
     currentIndex.value = 0
     if (player.value) player.value.currentTime = 0
     if (audioPlayer.value) audioPlayer.value.currentTime = 0

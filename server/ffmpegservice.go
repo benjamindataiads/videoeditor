@@ -49,14 +49,9 @@ func buildConcatenatedMP4(s *Server, req ExportRequest, outPath string) error {
 				width, height, width, height, width, height)
 		}
 
-		// Add horizontal flip if reversed
+		// Add horizontal flip if reversed (for normal playback)
 		if clip.Reversed {
 			vfChain += ",hflip"
-		}
-
-		// Add reverse playback if requested (only for videos)
-		if clip.ReversePlayback && asset.Kind == "video" {
-			vfChain += ",reverse"
 		}
 
 		if asset.Kind == "image" {
@@ -80,29 +75,71 @@ func buildConcatenatedMP4(s *Server, req ExportRequest, outPath string) error {
 				return err
 			}
 		} else { // video
-			// Use input seek (-ss) and duration (-t)
-			inKw := ffmpeg.KwArgs{}
 			start := clip.StartSec
 			end := clip.EndSec
-			if start > 0 {
-				inKw["ss"] = fmt.Sprintf("%f", start)
-			}
 			dur := 0.0
 			if end > 0 && end > start {
 				dur = end - start
 			}
-			in := ffmpeg.Input(inputPath, inKw)
-			outKw := ffmpeg.KwArgs{
-				"vcodec":  "libx264",
-				"r":       30,
-				"pix_fmt": "yuv420p",
-				"vf":      vfChain,
-			}
-			if dur > 0 {
-				outKw["t"] = fmt.Sprintf("%f", dur)
-			}
-			if err := in.Output(segPath, outKw).OverWriteOutput().Run(); err != nil {
-				return err
+			
+			if clip.ReversePlayback {
+				// For reverse playback, we need to handle trimming differently
+				// First apply trimming in the filter chain, then reverse
+				var trimFilter string
+				if start > 0 || (end > 0 && end > start) {
+					if end > 0 && end > start {
+						trimFilter = fmt.Sprintf("trim=start=%f:end=%f,setpts=PTS-STARTPTS", start, end)
+					} else if start > 0 {
+						trimFilter = fmt.Sprintf("trim=start=%f,setpts=PTS-STARTPTS", start)
+					}
+				}
+				
+				// Build the complete filter chain: scale -> trim -> reverse -> hflip (if needed)
+				var fullVfChain string
+				if req.CropMode == "crop" {
+					fullVfChain = fmt.Sprintf("scale=%d:%d:force_original_aspect_ratio=increase,crop=%d:%d,setsar=1",
+						width, height, width, height)
+				} else {
+					fullVfChain = fmt.Sprintf("scale=%d:%d:force_original_aspect_ratio=decrease,pad=%d:%d:(%d-iw)/2:(%d-ih)/2:black,setsar=1",
+						width, height, width, height, width, height)
+				}
+				
+				if trimFilter != "" {
+					fullVfChain += "," + trimFilter
+				}
+				fullVfChain += ",reverse"
+				if clip.Reversed {
+					fullVfChain += ",hflip"
+				}
+				
+				in := ffmpeg.Input(inputPath)
+				if err := in.Output(segPath, ffmpeg.KwArgs{
+					"vcodec":  "libx264",
+					"r":       30,
+					"pix_fmt": "yuv420p",
+					"vf":      fullVfChain,
+				}).OverWriteOutput().Run(); err != nil {
+					return err
+				}
+			} else {
+				// Normal forward playback - use input seek for efficiency
+				inKw := ffmpeg.KwArgs{}
+				if start > 0 {
+					inKw["ss"] = fmt.Sprintf("%f", start)
+				}
+				in := ffmpeg.Input(inputPath, inKw)
+				outKw := ffmpeg.KwArgs{
+					"vcodec":  "libx264",
+					"r":       30,
+					"pix_fmt": "yuv420p",
+					"vf":      vfChain,
+				}
+				if dur > 0 {
+					outKw["t"] = fmt.Sprintf("%f", dur)
+				}
+				if err := in.Output(segPath, outKw).OverWriteOutput().Run(); err != nil {
+					return err
+				}
 			}
 		}
 		segPaths = append(segPaths, segPath)

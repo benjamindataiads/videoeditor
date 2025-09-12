@@ -35,17 +35,17 @@
     "durationSec": 0
   },
   {
-    "id": "358b85e3-f59d-4f35-9f34-16d4ca7cedb0",
-    "filename": "358b85e3-f59d-4f35-9f34-16d4ca7cedb0-Bee_Gees_-_Stayin'_Alive_(Official_Video).mp3",
-    "url": "/uploads/358b85e3-f59d-4f35-9f34-16d4ca7cedb0-Bee_Gees_-_Stayin'_Alive_(Official_Video).mp3",
-    "kind": "unknown",
-    "durationSec": 0
-  },
-  {
     "id": "c91753fd-831f-4843-9e98-096ac24bd1f3",
     "filename": "c91753fd-831f-4843-9e98-096ac24bd1f3-barbe.mp4",
     "url": "/uploads/c91753fd-831f-4843-9e98-096ac24bd1f3-barbe.mp4",
     "kind": "video",
+    "durationSec": 0
+  },
+  {
+    "id": "358b85e3-f59d-4f35-9f34-16d4ca7cedb0",
+    "filename": "358b85e3-f59d-4f35-9f34-16d4ca7cedb0-Bee_Gees_-_Stayin'_Alive_(Official_Video).mp3",
+    "url": "/uploads/358b85e3-f59d-4f35-9f34-16d4ca7cedb0-Bee_Gees_-_Stayin'_Alive_(Official_Video).mp3",
+    "kind": "unknown",
     "durationSec": 0
   },
   {
@@ -60,6 +60,13 @@
     "filename": "b4151949-3685-4c10-939a-f14a2adcdc02-tame_loop3.mp3",
     "url": "/uploads/b4151949-3685-4c10-939a-f14a2adcdc02-tame_loop3.mp3",
     "kind": "audio",
+    "durationSec": 0
+  },
+  {
+    "id": "0feaeedf-056e-4d97-9df8-c78c447a24e6",
+    "filename": "0feaeedf-056e-4d97-9df8-c78c447a24e6-export-57c11fad-160b-418a-aad6-f3eb81aea808.mp4",
+    "url": "/uploads/0feaeedf-056e-4d97-9df8-c78c447a24e6-export-57c11fad-160b-418a-aad6-f3eb81aea808.mp4",
+    "kind": "video",
     "durationSec": 0
   }
 ]
