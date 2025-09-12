@@ -147,14 +147,19 @@
                    :class="[playerMediaClass, { 'scale-x-[-1]': currentClip?.reversed }]" />
             <img v-else :class="[playerMediaClass, { 'scale-x-[-1]': currentClip?.reversed }]" :src="currentImageSrc" />
 
-            <!-- Overlay video for transition preview -->
-            <video v-show="overlayOpacity > 0"
+            <!-- Overlay for transition preview (video or image) -->
+            <video v-if="overlayIsVideo && overlayOpacity > 0"
                    ref="overlayPlayer"
                    :src="overlaySrc"
                    muted preload="metadata"
                    class="absolute inset-0"
                    :style="{ opacity: overlayOpacity.toFixed(3) }"
                    :class="playerMediaClass" />
+            <img v-else-if="!overlayIsVideo && overlayImageSrc && overlayOpacity > 0"
+                 :src="overlayImageSrc"
+                 class="absolute inset-0"
+                 :style="{ opacity: overlayOpacity.toFixed(3) }"
+                 :class="playerMediaClass" />
 
             <audio v-if="audioClips.length > 0" ref="audioPlayer" :src="audioSrc" @ended="onAudioEnded" class="hidden"/>
           </div>
@@ -402,6 +407,14 @@ const overlaySrc = computed(() => {
   if (!asset || asset.kind !== 'video') return ''
   return backendBase + asset.url
 })
+const overlayImageSrc = computed(() => {
+  const nextIndex = currentIndex.value + 1
+  if (nextIndex >= clips.value.length) return ''
+  const asset = assets.value.find(a => a.id === clips.value[nextIndex].assetId)
+  if (!asset || asset.kind !== 'image') return ''
+  return backendBase + asset.url
+})
+const overlayIsVideo = computed(() => !!overlaySrc.value)
 const availableTransitions = ref<Transition[]>([
   {
     id: 'fade',
@@ -680,8 +693,10 @@ function setupTransitionPreview() {
   // Prepare overlay element
   const op = overlayPlayer.value
   const nextStart = clips.value[nextIdx].startSec ?? 0
-  op.currentTime = Math.max(0, nextStart)
-  op.pause()
+  if (overlayIsVideo.value) {
+    op.currentTime = Math.max(0, nextStart)
+    op.pause()
+  }
   // Drive opacity in timeupdate
   player.value.ontimeupdate = () => {
     updatePlayhead()
@@ -693,14 +708,18 @@ function setupTransitionPreview() {
     if (remaining <= dur && remaining >= 0) {
       const progress = Math.min(1, Math.max(0, (dur - remaining) / dur))
       overlayOpacity.value = progress
-      if (op.paused) {
-        op.play().catch(() => {})
+      if (overlayIsVideo.value) {
+        if (op.paused) {
+          op.play().catch(() => {})
+        }
       }
     } else {
       if (overlayOpacity.value !== 0) {
         overlayOpacity.value = 0
-        op.pause()
-        op.currentTime = Math.max(0, nextStart)
+        if (overlayIsVideo.value) {
+          op.pause()
+          op.currentTime = Math.max(0, nextStart)
+        }
       }
     }
   }
