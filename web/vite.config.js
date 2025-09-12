@@ -8,7 +8,7 @@ export default defineConfig({
     strictPort: true
   },
   define: {
-    'import.meta.env.VITE_BACKEND_BASE': JSON.stringify(process.env.VITE_BACKEND_BASE || 'http://localhost:8080')
+    'import.meta.env.VITE_BACKEND_BASE': JSON.stringify(process.env.VITE_BACKEND_BASE || 'https://videoeditor-production-3bd0.up.railway.app')
   }
 })
 

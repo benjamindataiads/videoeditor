@@ -266,7 +266,12 @@ type Asset = { id: string; filename: string; url: string; kind: 'image'|'video'|
 type ExportClip = { assetId: string; startSec?: number; endSec?: number; durationSec?: number }
 type ExportItem = { filename: string; url: string; size?: number; modTime?: string }
 
-const backendBase = (import.meta as any).env?.VITE_BACKEND_BASE ?? 'http://localhost:8080'
+// Debug environment variables
+console.log('Environment variables:', import.meta.env)
+console.log('VITE_BACKEND_BASE:', import.meta.env.VITE_BACKEND_BASE)
+
+const backendBase = import.meta.env.VITE_BACKEND_BASE || 'https://videoeditor-production-3bd0.up.railway.app'
+console.log('Using backend URL:', backendBase)
 
 const assets = ref<Asset[]>([])
 const assetDurations = ref<Record<string, number>>({})
