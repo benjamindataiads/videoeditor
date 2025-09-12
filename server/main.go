@@ -34,6 +34,8 @@ type ExportClip struct {
 	EndSec   float64 `json:"endSec"`
 	// Duration for images in seconds
 	DurationSec float64 `json:"durationSec"`
+	// Whether to reverse/mirror the clip horizontally
+	Reversed bool `json:"reversed"`
 }
 
 type ExportRequest struct {

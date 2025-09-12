@@ -49,6 +49,11 @@ func buildConcatenatedMP4(s *Server, req ExportRequest, outPath string) error {
 				width, height, width, height, width, height)
 		}
 
+		// Add horizontal flip if reversed
+		if clip.Reversed {
+			vfChain += ",hflip"
+		}
+
 		if asset.Kind == "image" {
 			// Turn still image into short H.264 segment
 			if clip.DurationSec <= 0 {

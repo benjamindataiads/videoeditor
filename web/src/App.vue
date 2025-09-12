@@ -123,8 +123,8 @@
           <!-- Player -->
           <div :class="playerContainerClass" class="bg-gray-800 rounded-xl border border-gray-300 dark:border-gray-600 overflow-hidden shadow-lg">
             <video v-if="!isCurrentImage" ref="player" :src="currentSrc" @ended="onEnded"
-                   :class="playerMediaClass" />
-            <img v-else :class="playerMediaClass" :src="currentImageSrc" />
+                   :class="[playerMediaClass, { 'scale-x-[-1]': currentClip?.reversed }]" />
+            <img v-else :class="[playerMediaClass, { 'scale-x-[-1]': currentClip?.reversed }]" :src="currentImageSrc" />
             <audio v-if="audioClips.length > 0" ref="audioPlayer" :src="audioSrc" @ended="onAudioEnded" class="hidden"/>
           </div>
 
@@ -152,19 +152,29 @@
                 <!-- Video Clips -->
                 <div class="pt-6 flex gap-2" :style="{ width: totalWidth + 'px', marginLeft: trackLeftPad + 'px' }">
                   <div v-for="(c, i) in clips" :key="i" @click="playAt(i)"
-                       class="timeline-clip"
+                       class="timeline-clip group relative"
                        :class="{ 'active': i === currentIndex }"
                        :style="{ width: clipWidth(c) + 'px' }">
                     <img v-if="getAsset(c.assetId)?.kind === 'image'" 
                          :src="backendBase + (getAsset(c.assetId)?.url || '')"
-                         class="w-20 h-14 object-cover rounded bg-gray-100" />
+                         class="w-20 h-14 object-cover rounded bg-gray-100"
+                         :class="{ 'scale-x-[-1]': c.reversed }" />
                     <video v-else :src="backendBase + (getAsset(c.assetId)?.url || '')" muted preload="metadata"
-                           class="w-20 h-14 object-cover rounded bg-gray-100"></video>
+                           class="w-20 h-14 object-cover rounded bg-gray-100"
+                           :class="{ 'scale-x-[-1]': c.reversed }"></video>
                     
                     <div class="absolute top-0 left-0 w-1.5 h-full bg-gray-300 dark:bg-gray-600 cursor-ew-resize rounded-l"
                          @mousedown.stop.prevent="beginTrim(i, 'left', $event)"></div>
                     <div class="absolute top-0 right-0 w-1.5 h-full bg-gray-300 dark:bg-gray-600 cursor-ew-resize rounded-r"
                          @mousedown.stop.prevent="beginTrim(i, 'right', $event)"></div>
+                    
+                    <!-- Reverse/Mirror Toggle Button -->
+                    <button @click.stop="toggleReverse(i)"
+                            class="absolute top-1 left-1 w-5 h-5 bg-blue-500 text-white rounded text-xs hover:bg-blue-600 transition-all opacity-0 group-hover:opacity-100"
+                            :class="{ 'opacity-100 bg-blue-600': c.reversed }"
+                            title="Toggle reverse/mirror">
+                      ⇄
+                    </button>
                     
                     <span class="text-xs text-gray-600 dark:text-gray-400 mt-1">{{ displayDuration(c).toFixed(1) }}s</span>
                     <button @click.stop="removeClip(i)"
@@ -263,7 +273,7 @@ import {
 } from '@heroicons/vue/24/outline'
 
 type Asset = { id: string; filename: string; url: string; kind: 'image'|'video'|'audio'|'unknown' }
-type ExportClip = { assetId: string; startSec?: number; endSec?: number; durationSec?: number }
+type ExportClip = { assetId: string; startSec?: number; endSec?: number; durationSec?: number; reversed?: boolean }
 type ExportItem = { filename: string; url: string; size?: number; modTime?: string }
 
 // Debug environment variables
@@ -397,6 +407,15 @@ function removeClip(i: number) {
   playAt(Math.max(0, currentIndex.value))
 }
 
+function toggleReverse(i: number) {
+  const clip = clips.value[i]
+  clip.reversed = !clip.reversed
+  // Refresh the current player if this is the active clip
+  if (i === currentIndex.value) {
+    playAt(i)
+  }
+}
+
 async function playAt(i: number) {
   currentIndex.value = i
   await nextTick()
@@ -464,7 +483,8 @@ async function exportTimeline() {
         assetId: c.assetId,
         startSec: c.startSec ?? 0,
         endSec: c.endSec ?? 0,
-        durationSec: c.durationSec ?? 0
+        durationSec: c.durationSec ?? 0,
+        reversed: c.reversed ?? false
       })),
       audio: audioClips.value.length > 0 ? { assetId: audioClips.value[0].assetId, volume: 1 } : undefined,
       aspectRatio: aspectRatio.value,
