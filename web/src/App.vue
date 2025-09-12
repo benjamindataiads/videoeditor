@@ -218,10 +218,6 @@
                   <div class="absolute -top-5 -left-8 bg-gray-800 text-white text-xs px-2 py-1 rounded">
                     {{ formatTime(cursor.timeSec) }}
                   </div>
-                  <div v-if="cursor.asset" class="absolute -top-20 -left-16 w-32 h-18 bg-black border border-gray-300 rounded overflow-hidden">
-                    <img v-if="cursor.asset.kind === 'image'" :src="backendBase + cursor.asset.url" class="w-full h-full object-cover" />
-                    <video v-else :src="backendBase + cursor.asset.url" muted class="w-full h-full object-cover"></video>
-                  </div>
                 </div>
                 <div class="absolute top-0 bottom-0 w-0.5 bg-accent-500 pointer-events-none" :style="{ left: playheadX + 'px' }"></div>
               </div>
@@ -609,7 +605,7 @@ const ticks = computed(() => {
 function formatTime(t: number) { return `${Math.floor(t/60)}:${String(Math.floor(t%60)).padStart(2,'0')}` }
 
 // Hover cursor preview
-const cursor = ref<{ visible: boolean; x: number; timeSec: number; asset?: Asset | null }>({ visible: false, x: 0, timeSec: 0, asset: null })
+const cursor = ref<{ visible: boolean; x: number; timeSec: number }>({ visible: false, x: 0, timeSec: 0 })
 function onTimelineMove(e: MouseEvent) {
   if (!timelineEl.value) return
   const rect = timelineEl.value.getBoundingClientRect()
@@ -618,15 +614,6 @@ function onTimelineMove(e: MouseEvent) {
   cursor.value.x = x
   const time = x / pxPerSec
   cursor.value.timeSec = Math.max(0, time)
-  let acc = 0
-  for (const c of clips.value) {
-    const dur = displayDuration(c)
-    if (time >= acc && time < acc + dur) {
-      cursor.value.asset = getAsset(c.assetId)
-      break
-    }
-    acc += dur
-  }
 }
 function hideCursor() { cursor.value.visible = false }
 
