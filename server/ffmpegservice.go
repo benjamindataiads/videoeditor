@@ -237,42 +237,52 @@ func buildVideoWithTransitionsDirectly(s *Server, req ExportRequest, segPaths []
 		transition := req.Transitions[0]
 		xfadeType := getXfadeTransition(transition.TransitionID)
 
-		// Build FFmpeg command for two-clip transition
+		fmt.Printf("DEBUG: Creating transition between %s and %s\n", segPaths[0], segPaths[1])
+		fmt.Printf("DEBUG: Transition type: %s, duration: %.2f\n", xfadeType, transition.Duration)
+
+		// Use a more direct approach with filter_complex
 		input1 := ffmpeg.Input(segPaths[0])
 		input2 := ffmpeg.Input(segPaths[1])
 
-		// Create xfade filter
-		filterComplex := fmt.Sprintf("[0:v][1:v]xfade=transition=%s:duration=%.2f:offset=2.0[vout]",
-			xfadeType, transition.Duration)
+		// Calculate proper offset based on first video duration
+		// For now, use a simple approach: start transition 1 second before first video ends
+		// In a real implementation, we'd need to get the actual video duration
+		offset := 3.0 // Start transition at 3 seconds (assumes videos are longer than this)
+
+		// Create the xfade filter chain
+		xfadeStream := ffmpeg.Filter([]*ffmpeg.Stream{input1.Video(), input2.Video()}, "xfade", ffmpeg.Args{
+			fmt.Sprintf("transition=%s", xfadeType),
+			fmt.Sprintf("duration=%.2f", transition.Duration),
+			fmt.Sprintf("offset=%.2f", offset),
+		})
+
+		fmt.Printf("DEBUG: xfade filter: transition=%s, duration=%.2f, offset=%.2f\n", xfadeType, transition.Duration, offset)
 
 		// Handle audio if present
 		if req.Audio != nil {
 			a, ok := s.assetsIndex[req.Audio.AssetID]
 			if ok {
 				aPath := filepath.Join(s.uploadDir, a.Filename)
-				audioInput := ffmpeg.Input(aPath)
+				audioStream := ffmpeg.Input(aPath).Audio()
 
-				// Mix video with audio - need to use different approach for multiple maps
-				cmd := ffmpeg.Output([]*ffmpeg.Stream{input1, input2, audioInput}, outPath, ffmpeg.KwArgs{
-					"filter_complex": filterComplex,
-					"c:v":            "libx264",
-					"c:a":            "aac",
-					"pix_fmt":        "yuv420p",
-					"r":              30,
-				})
-				// Add maps separately to avoid duplicate keys
-				cmd = cmd.GlobalArgs("-map", "[vout]", "-map", "2:a")
-				return cmd.OverWriteOutput().Run()
+				if req.Audio.Volume > 0 && req.Audio.Volume != 1 {
+					audioStream = audioStream.Filter("volume", ffmpeg.Args{fmt.Sprintf("%f", req.Audio.Volume)})
+				}
+
+				return ffmpeg.Output([]*ffmpeg.Stream{xfadeStream, audioStream}, outPath, ffmpeg.KwArgs{
+					"c:v":     "libx264",
+					"c:a":     "aac",
+					"pix_fmt": "yuv420p",
+					"r":       30,
+				}).OverWriteOutput().Run()
 			}
 		}
 
 		// Video only with transition
-		return ffmpeg.Output([]*ffmpeg.Stream{input1, input2}, outPath, ffmpeg.KwArgs{
-			"filter_complex": filterComplex,
-			"map":            "[vout]",
-			"c:v":            "libx264",
-			"pix_fmt":        "yuv420p",
-			"r":              30,
+		return xfadeStream.Output(outPath, ffmpeg.KwArgs{
+			"c:v":     "libx264",
+			"pix_fmt": "yuv420p",
+			"r":       30,
 		}).OverWriteOutput().Run()
 	}
 

@@ -176,6 +176,13 @@ func main() {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
+
+		// Debug: log the received request
+		fmt.Printf("DEBUG: Received export request with %d clips and %d transitions\n", len(req.Clips), len(req.Transitions))
+		for i, t := range req.Transitions {
+			fmt.Printf("DEBUG: Transition %d: clipIndex=%d, transitionId=%s, duration=%.2f\n",
+				i, t.ClipIndex, t.TransitionID, t.Duration)
+		}
 		id := uuid.New().String()
 		outPath := filepath.Join(s.exportDir, fmt.Sprintf("export-%s.mp4", id))
 		job := &ExportResponse{ExportID: id, Status: "processing"}

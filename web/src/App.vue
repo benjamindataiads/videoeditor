@@ -224,6 +224,11 @@
                         +
                       </button>
                       
+                      <!-- Debug info -->
+                      <div v-if="getTransitionForClip(i)" class="text-xs text-gray-500 mt-1">
+                        {{ getTransitionForClip(i)?.name }}
+                      </div>
+                      
                       <!-- Existing Transition -->
                       <div v-else-if="getTransitionForClip(i)" 
                            class="transition-indicator relative group">
