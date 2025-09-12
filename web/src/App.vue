@@ -574,6 +574,9 @@ function detachVideoGuards() {
 
 // Reverse playback implementation
 let reverseInterval: number | null = null
+let reversePlaybackStart: number = 0
+let reversePlaybackDuration: number = 0
+
 function startReversePlayback(video: HTMLVideoElement, startTime: number, endTime: number) {
   video.pause() // Don't use native playback
   const fps = 30 // Target 30 FPS for smooth reverse playback
@@ -581,6 +584,8 @@ function startReversePlayback(video: HTMLVideoElement, startTime: number, endTim
   const playbackRate = 1 / fps // Move backwards by 1/30th of a second per frame
   
   let currentTime = video.currentTime
+  reversePlaybackStart = performance.now()
+  reversePlaybackDuration = endTime - startTime
   
   reverseInterval = window.setInterval(() => {
     currentTime -= playbackRate
@@ -604,6 +609,8 @@ function clearReversePlayback() {
     window.clearInterval(reverseInterval)
     reverseInterval = null
   }
+  reversePlaybackStart = 0
+  reversePlaybackDuration = 0
 }
 
 // Custom controls
@@ -678,12 +685,23 @@ function updatePlayhead() {
   for (let i = 0; i < currentIndex.value; i++) elapsed += displayDuration(clips.value[i])
   let within = 0
   const p = player.value
+  const currentClipData = currentClip.value
+  
   if (isCurrentImage.value) {
     if (imageStartMs > 0) {
       within = Math.min((performance.now() - imageStartMs) / 1000, imageDurSec)
     }
-  } else if (p && !isNaN(p.currentTime)) {
-    within = p.currentTime
+  } else if (p && !isNaN(p.currentTime) && currentClipData) {
+    if (currentClipData.reversePlayback && reverseInterval) {
+      // For reverse playback, calculate timeline position based on elapsed time
+      // The playhead should move left to right even though video plays backwards
+      const elapsedSeconds = (performance.now() - reversePlaybackStart) / 1000
+      within = Math.min(elapsedSeconds, reversePlaybackDuration)
+    } else {
+      // Normal forward playback
+      const start = currentClipData.startSec ?? 0
+      within = Math.max(0, p.currentTime - start)
+    }
   }
   playheadX.value = trackLeftPad + (elapsed + within) * pxPerSec
 }
