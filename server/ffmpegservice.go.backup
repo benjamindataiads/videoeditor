@@ -225,47 +225,19 @@ func buildConcatenatedMP4(s *Server, req ExportRequest, outPath string) error {
 
 		if hasVideoAudio {
 			if len(segPaths) == 1 {
-				// Single segment with audio (only if it's from a video)
-				if len(req.Clips) > 0 {
-					if asset, ok := s.assetsIndex[req.Clips[0].AssetID]; ok && asset.Kind == "video" {
-						videoAudioStream = ffmpeg.Input(segPaths[0]).Audio()
-					}
-				}
+				// Single segment with audio
+				videoAudioStream = ffmpeg.Input(segPaths[0]).Audio()
 			} else {
-				// Multiple segments: build audio timeline that matches video timeline
-				var audioSegments []*ffmpeg.Stream
-				
-				for i, segPath := range segPaths {
-					if i < len(req.Clips) {
-						clip := req.Clips[i]
-						segDuration := 1.0 // default for images
-						if clip.DurationSec > 0 {
-							segDuration = clip.DurationSec
-						}
-						
-						if asset, ok := s.assetsIndex[clip.AssetID]; ok && asset.Kind == "video" {
-							// Video segment - use its audio
-							audioSegments = append(audioSegments, ffmpeg.Input(segPath).Audio())
-						} else {
-							// Image segment - create silence of the same duration
-							silenceStream := ffmpeg.Input("anullsrc=channel_layout=stereo:sample_rate=44100:duration=" + fmt.Sprintf("%.2f", segDuration), ffmpeg.KwArgs{"f": "lavfi"})
-							audioSegments = append(audioSegments, silenceStream.Audio())
-						}
-					}
+				// Multiple segments: concatenate their audio
+				var audioInputs []*ffmpeg.Stream
+				for _, segPath := range segPaths {
+					audioInputs = append(audioInputs, ffmpeg.Input(segPath).Audio())
 				}
-				
-				if len(audioSegments) > 0 {
-					if len(audioSegments) == 1 {
-						videoAudioStream = audioSegments[0]
-					} else {
-						// Concatenate all audio segments (including silence for images)
-						videoAudioStream = ffmpeg.Filter(audioSegments, "concat", ffmpeg.Args{
-							fmt.Sprintf("n=%d", len(audioSegments)),
-							"v=0", // audio only
-							"a=1",
-						})
-					}
-				}
+				videoAudioStream = ffmpeg.Filter(audioInputs, "concat", ffmpeg.Args{
+					fmt.Sprintf("n=%d", len(audioInputs)),
+					"v=0", // audio only
+					"a=1",
+				})
 			}
 		}
 	}

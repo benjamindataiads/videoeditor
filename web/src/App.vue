@@ -139,6 +139,18 @@
                         title="Crop - fill frame, may cut content">Crop</button>
               </div>
             </div>
+
+            <div class="flex items-center gap-2">
+              <span class="text-sm text-gray-600 dark:text-gray-400">Video Audio:</span>
+              <div class="flex gap-1">
+                <button @click="includeVideoAudio = true" 
+                        :class="includeVideoAudio ? 'btn-primary' : 'btn-secondary'"
+                        title="Include original video audio in export">On</button>
+                <button @click="includeVideoAudio = false"
+                        :class="!includeVideoAudio ? 'btn-primary' : 'btn-secondary'"
+                        title="Mute original video audio in export">Off</button>
+              </div>
+            </div>
           </div>
 
           <!-- Player -->
@@ -380,6 +392,7 @@ const playheadX = ref(0)
 const activeTab = ref<'media'|'audio'|'transitions'>('media')
 const aspectRatio = ref<'16:9'|'1:1'|'9:16'>('16:9')
 const cropMode = ref<'letterbox'|'crop'>('letterbox')
+const includeVideoAudio = ref(true)
 let animId: number | null = null
 let imageStartMs = 0
 let imageDurSec = 1
@@ -772,6 +785,7 @@ async function exportTimeline() {
       audio: audioClips.value.length > 0 ? { assetId: audioClips.value[0].assetId, volume: 1 } : undefined,
       aspectRatio: aspectRatio.value,
       cropMode: cropMode.value,
+      includeVideoAudio: includeVideoAudio.value,
       transitions: Object.entries(clipTransitions.value).map(([clipIndex, transition]) => ({
         clipIndex: parseInt(clipIndex),
         transitionId: transition.transitionId,

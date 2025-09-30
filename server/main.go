@@ -41,11 +41,12 @@ type ExportClip struct {
 }
 
 type ExportRequest struct {
-	Clips       []ExportClip `json:"clips"`
-	Audio       *AudioSpec   `json:"audio,omitempty"`
-	AspectRatio string       `json:"aspectRatio,omitempty"`
-	CropMode    string       `json:"cropMode,omitempty"`
-	Transitions []Transition `json:"transitions,omitempty"`
+	Clips             []ExportClip `json:"clips"`
+	Audio             *AudioSpec   `json:"audio,omitempty"`
+	AspectRatio       string       `json:"aspectRatio,omitempty"`
+	CropMode          string       `json:"cropMode,omitempty"`
+	IncludeVideoAudio bool         `json:"includeVideoAudio,omitempty"`
+	Transitions       []Transition `json:"transitions,omitempty"`
 }
 
 type Transition struct {
