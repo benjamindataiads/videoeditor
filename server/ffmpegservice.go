@@ -19,6 +19,7 @@ func buildConcatenatedMP4(s *Server, req ExportRequest, outPath string) error {
 
 	// 1) Build normalized segments
 	var segPaths []string
+	var segDurations []float64
 	for i, clip := range req.Clips {
 		segPath := filepath.Join(jobDir, segmentFilename(i))
 		asset, ok := s.assetsIndex[clip.AssetID]
@@ -74,6 +75,12 @@ func buildConcatenatedMP4(s *Server, req ExportRequest, outPath string) error {
 			if err != nil {
 				return err
 			}
+			// record duration for image segment
+			if clip.DurationSec <= 0 {
+				segDurations = append(segDurations, 1.0)
+			} else {
+				segDurations = append(segDurations, clip.DurationSec)
+			}
 		} else { // video
 			start := clip.StartSec
 			end := clip.EndSec
@@ -121,6 +128,14 @@ func buildConcatenatedMP4(s *Server, req ExportRequest, outPath string) error {
 				}).OverWriteOutput().Run(); err != nil {
 					return err
 				}
+				if dur <= 0 {
+					if clip.DurationSec > 0 {
+						dur = clip.DurationSec
+					} else {
+						dur = 1.0
+					}
+				}
+				segDurations = append(segDurations, dur)
 			} else {
 				// Normal forward playback - use input seek for efficiency
 				inKw := ffmpeg.KwArgs{}
@@ -140,6 +155,14 @@ func buildConcatenatedMP4(s *Server, req ExportRequest, outPath string) error {
 				if err := in.Output(segPath, outKw).OverWriteOutput().Run(); err != nil {
 					return err
 				}
+				if dur <= 0 {
+					if clip.DurationSec > 0 {
+						dur = clip.DurationSec
+					} else {
+						dur = 1.0
+					}
+				}
+				segDurations = append(segDurations, dur)
 			}
 		}
 		segPaths = append(segPaths, segPath)
@@ -155,18 +178,8 @@ func buildConcatenatedMP4(s *Server, req ExportRequest, outPath string) error {
 		// Single clip, no transitions needed
 		videoOut = ffmpeg.Input(segPaths[0]).Video()
 	} else {
-		// Multiple clips, check if we have transitions
-		if len(req.Transitions) > 0 {
-			// Use direct FFmpeg command for transitions (more reliable)
-			return buildVideoWithTransitionsDirectly(s, req, segPaths, outPath)
-		} else {
-			// No transitions, simple concatenation
-			var streams []*ffmpeg.Stream
-			for _, p := range segPaths {
-				streams = append(streams, ffmpeg.Input(p).Video())
-			}
-			videoOut = ffmpeg.Concat(streams, ffmpeg.KwArgs{"v": 1, "a": 0})
-		}
+		// Multiple clips: build chain with transitions (if any)
+		videoOut = buildVideoChainWithTransitions(segPaths, segDurations, req.Transitions)
 	}
 
 	// Optional audio
@@ -315,7 +328,7 @@ func buildVideoWithTransitionsDirectly(s *Server, req ExportRequest, segPaths []
 }
 
 // buildVideoChainWithTransitions creates a complex filter chain with xfade transitions
-func buildVideoChainWithTransitions(segPaths []string, transitions []Transition) *ffmpeg.Stream {
+func buildVideoChainWithTransitions(segPaths []string, segDurations []float64, transitions []Transition) *ffmpeg.Stream {
 	if len(segPaths) <= 1 {
 		if len(segPaths) == 1 {
 			return ffmpeg.Input(segPaths[0]).Video()
@@ -323,13 +336,12 @@ func buildVideoChainWithTransitions(segPaths []string, transitions []Transition)
 		return nil
 	}
 
-	// Create a map of transitions by clip index for easy lookup
 	transitionMap := make(map[int]Transition)
 	for _, t := range transitions {
 		transitionMap[t.ClipIndex] = t
 	}
 
-	// If no transitions, just concatenate normally
+	// If no transitions, simple concat
 	if len(transitionMap) == 0 {
 		var streams []*ffmpeg.Stream
 		for _, p := range segPaths {
@@ -338,18 +350,36 @@ func buildVideoChainWithTransitions(segPaths []string, transitions []Transition)
 		return ffmpeg.Concat(streams, ffmpeg.KwArgs{"v": 1, "a": 0})
 	}
 
-	// Iteratively chain clips with xfade when a transition is defined; otherwise hard concat
+	// Chain with cumulative timeline accounting
 	out := ffmpeg.Input(segPaths[0]).Video()
+	cumulative := 0.0
+	if len(segDurations) > 0 && segDurations[0] > 0 {
+		cumulative = segDurations[0]
+	} else {
+		cumulative = 1.0
+	}
 	for i := 1; i < len(segPaths); i++ {
 		next := ffmpeg.Input(segPaths[i]).Video()
+		segDur := 1.0
+		if i < len(segDurations) && segDurations[i] > 0 {
+			segDur = segDurations[i]
+		}
 		if tr, ok := transitionMap[i-1]; ok {
+			// offset measured on first input timeline
+			offset := cumulative - tr.Duration
+			if offset < 0 {
+				offset = 0
+			}
 			out = ffmpeg.Filter([]*ffmpeg.Stream{out, next}, "xfade", ffmpeg.Args{
 				fmt.Sprintf("transition=%s", getXfadeTransition(tr.TransitionID)),
 				fmt.Sprintf("duration=%.2f", tr.Duration),
-				"offset=0",
+				fmt.Sprintf("offset=%.2f", offset),
 			})
+			// After xfade, overlapped portion not added twice
+			cumulative = cumulative + segDur - tr.Duration
 		} else {
 			out = ffmpeg.Concat([]*ffmpeg.Stream{out, next}, ffmpeg.KwArgs{"v": 1, "a": 0})
+			cumulative += segDur
 		}
 	}
 	return out
